@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="株価SIM">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>株価シミュレーター</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --accent: #00e5ff;
+    --green: #00e676;
+    --red: #ff1744;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --border: #1e3a5f;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(0, 100, 200, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(0, 229, 255, 0.05) 0%, transparent 50%);
+  }
+
+  .header {
+    padding: 20px 20px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .day-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .price-section {
+    padding: 30px 20px 20px;
+    text-align: center;
+  }
+
+  .price-label {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .price-display {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 72px;
+    font-weight: bold;
+    line-height: 1;
+    transition: color 0.5s;
+    text-shadow: 0 0 40px currentColor;
+    letter-spacing: -2px;
+  }
+
+  .price-display.up { color: var(--green); }
+  .price-display.down { color: var(--red); }
+  .price-display.neutral { color: var(--accent); }
+
+  .change-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 12px;
+    min-height: 28px;
+  }
+
+  .change-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    padding: 4px 14px;
+    border-radius: 6px;
+    transition: all 0.3s;
+  }
+  .change-badge.up { color: var(--green); background: rgba(0,230,118,0.1); border: 1px solid rgba(0,230,118,0.3); }
+  .change-badge.down { color: var(--red); background: rgba(255,23,68,0.1); border: 1px solid rgba(255,23,68,0.3); }
+
+  .pct-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .btn-area {
+    padding: 10px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .trade-btn {
+    width: 100%;
+    max-width: 320px;
+    height: 64px;
+    border: none;
+    border-radius: 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    letter-spacing: 4px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.1s, box-shadow 0.3s;
+    background: linear-gradient(135deg, #003d7a, #0064c8);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+    box-shadow: 0 0 30px rgba(0,100,200,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+
+  .trade-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 15px rgba(0,100,200,0.2);
+  }
+
+  .trade-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .trade-btn:hover::after { opacity: 1; }
+
+  .trade-btn.flash-up {
+    animation: flashUp 0.6s ease;
+  }
+  .trade-btn.flash-down {
+    animation: flashDown 0.6s ease;
+  }
+
+  @keyframes flashUp {
+    0%, 100% { box-shadow: 0 0 30px rgba(0,100,200,0.3); }
+    50% { box-shadow: 0 0 60px rgba(0,230,118,0.6); border-color: rgba(0,230,118,0.8); }
+  }
+  @keyframes flashDown {
+    0%, 100% { box-shadow: 0 0 30px rgba(0,100,200,0.3); }
+    50% { box-shadow: 0 0 60px rgba(255,23,68,0.6); border-color: rgba(255,23,68,0.8); }
+  }
+
+  .sub-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .sub-btn {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 120px;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    color: var(--muted);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .sub-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .sub-btn:active { transform: scale(0.97); }
+
+  .chart-section {
+    padding: 0 16px 16px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .chart-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .chart-meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  canvas#myChart { border-radius: 8px; }
+
+  .stats-row {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 16px;
+  }
+
+  .stat-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    color: var(--text);
+  }
+
+  .history-section {
+    padding: 0 16px 100px;
+  }
+
+  .history-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+  }
+
+  .history-day { color: var(--muted); }
+  .history-price { color: var(--text); }
+  .history-change.up { color: var(--green); }
+  .history-change.down { color: var(--red); }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 2px;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1000;
+    white-space: nowrap;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .pulse-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,229,255,0.4); }
+    70% { box-shadow: 0 0 0 20px rgba(0,229,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,229,255,0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">▶ STOCK SIM</div>
+  <div class="day-badge" id="dayBadge">DAY 0</div>
+</div>
+
+<div class="price-section">
+  <div class="price-label">現在値</div>
+  <div class="price-display neutral" id="priceDisplay">200</div>
+  <div class="change-row">
+    <div class="change-badge" id="changeBadge" style="display:none"></div>
+    <div class="pct-badge" id="pctBadge"></div>
+  </div>
+</div>
+
+<div class="btn-area">
+  <button class="trade-btn" id="tradeBtn" onclick="nextDay()">
+    ◆ &nbsp; 翌日へ &nbsp; ◆
+  </button>
+  <div class="sub-btns">
+    <button class="sub-btn" onclick="exportJPEG()">📊 グラフ保存</button>
+    <button class="sub-btn" onclick="exportJSON()">📤 データ出力</button>
+    <button class="sub-btn" onclick="document.getElementById('importFile').click()">📥 データ読込</button>
+    <button class="sub-btn" onclick="resetData()">🔄 リセット</button>
+  </div>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+</div>
+
+<div class="chart-section">
+  <div class="chart-card">
+    <div class="chart-header">
+      <div class="chart-title">価格推移</div>
+      <div class="chart-meta" id="chartMeta">BASE: 200</div>
+    </div>
+    <canvas id="myChart" height="160"></canvas>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">最高値</div>
+    <div class="stat-value" id="statHigh">200</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">最安値</div>
+    <div class="stat-value" id="statLow">200</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">累計変動</div>
+    <div class="stat-value" id="statTotal">±0</div>
+  </div>
+</div>
+
+<div class="history-section">
+  <div class="history-title">履歴</div>
+  <div class="history-list" id="historyList">
+    <div class="history-item">
+      <span class="history-day">DAY 0</span>
+      <span class="history-price">200</span>
+      <span class="history-change">―</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = 200;
+const STORAGE_KEY = 'stockSimData_v2';
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function dateLabel(dateStr) {
+  const parts = dateStr.split('-');
+  return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+}
+function daysSince(startStr, targetStr) {
+  return Math.round((new Date(targetStr) - new Date(startStr)) / 86400000);
+}
+
+let data = loadData();
+let chart;
+
+function loadData() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  const today = todayStr();
+  return {
+    startDate: today,
+    history: [{ day: 0, date: today, price: BASE, change: 0 }],
+    currentPrice: BASE
+  };
+}
+
+function saveData() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {}
+}
+
+function generateChange(currentPrice) {
+  // ランダム変動: 正規分布に近い形で ±3%〜15% の変動
+  const r = () => Math.random() + Math.random() + Math.random() - 1.5;
+  const volatility = 0.05 + Math.random() * 0.05;
+  const change = Math.round(currentPrice * volatility * r());
+  // 中間値200への引力（mean reversion）
+  const pullStrength = (BASE - currentPrice) * 0.03;
+  return change + Math.round(pullStrength);
+}
+
+function nextDay() {
+  const change = generateChange(data.currentPrice);
+  const newPrice = Math.max(1, data.currentPrice + change);
+  const today = todayStr();
+  const day = daysSince(data.startDate, today);
+
+  data.currentPrice = newPrice;
+  data.history.push({ day, date: today, price: newPrice, change });
+  saveData();
+
+  updateUI(change);
+
+  const btn = document.getElementById('tradeBtn');
+  btn.classList.remove('flash-up', 'flash-down');
+  void btn.offsetWidth;
+  btn.classList.add(change >= 0 ? 'flash-up' : 'flash-down');
+}
+
+function updateUI(lastChange) {
+  const price = data.currentPrice;
+  const today = todayStr();
+  const elapsedDay = daysSince(data.startDate, today);
+  const histIdx = data.history.length - 1;
+
+  // Price display
+  const priceEl = document.getElementById('priceDisplay');
+  priceEl.textContent = price;
+  priceEl.className = 'price-display ' + (lastChange > 0 ? 'up' : lastChange < 0 ? 'down' : 'neutral');
+
+  // Day badge: show elapsed real days + today's date
+  document.getElementById('dayBadge').textContent = `DAY ${elapsedDay} · ${dateLabel(today)}`;
+
+  // Change badge
+  const changeBadge = document.getElementById('changeBadge');
+  const pctBadge = document.getElementById('pctBadge');
+  if (histIdx > 0) {
+    changeBadge.style.display = '';
+    const sign = lastChange >= 0 ? '+' : '';
+    changeBadge.textContent = `${sign}${lastChange}`;
+    changeBadge.className = 'change-badge ' + (lastChange >= 0 ? 'up' : 'down');
+    const prev = data.history[histIdx - 1].price;
+    const pct = ((lastChange / prev) * 100).toFixed(2);
+    pctBadge.textContent = `(${sign}${pct}%)`;
+  }
+
+  // Stats
+  const prices = data.history.map(h => h.price);
+  const high = Math.max(...prices);
+  const low = Math.min(...prices);
+  const total = price - BASE;
+  document.getElementById('statHigh').textContent = high;
+  document.getElementById('statLow').textContent = low;
+  const totalEl = document.getElementById('statTotal');
+  totalEl.textContent = (total >= 0 ? '+' : '') + total;
+  totalEl.style.color = total >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Chart meta
+  document.getElementById('chartMeta').textContent = `${dateLabel(data.startDate)} → ${dateLabel(today)}`;
+
+  // Update chart
+  updateChart();
+
+  // History list
+  updateHistory();
+}
+
+function updateChart() {
+  const labels = data.history.map(h => h.date ? dateLabel(h.date) + (h.day !== undefined ? `\nD${h.day}` : '') : `D${h.day}`);
+  const prices = data.history.map(h => h.price);
+  const pointColors = prices.map(p => p >= BASE ? 'rgba(0,230,118,0.9)' : 'rgba(255,23,68,0.9)');
+
+  const segmentColor = (ctx) => {
+    const p0 = ctx.p0.parsed.y;
+    const p1 = ctx.p1.parsed.y;
+    if (p0 < BASE || p1 < BASE) return 'rgba(255,60,80,0.85)';
+    return 'rgba(0,229,255,0.85)';
+  };
+
+  const segmentFill = (ctx) => {
+    const p0 = ctx.p0.parsed.y;
+    const p1 = ctx.p1.parsed.y;
+    if (p0 < BASE || p1 < BASE) return 'rgba(255,60,80,0)';
+    return 'rgba(0,229,255,0)';
+  };
+
+  if (!chart) {
+    const chartCtx = document.getElementById('myChart').getContext('2d');
+    chart = new Chart(chartCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: prices,
+          borderColor: 'rgba(0,229,255,0.85)',
+          segment: { borderColor: segmentColor },
+          borderWidth: 2,
+          pointBackgroundColor: pointColors,
+          pointRadius: prices.length > 30 ? 2 : 4,
+          pointBorderWidth: 0,
+          fill: false,
+          tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 400 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a2236',
+            borderColor: '#1e3a5f',
+            borderWidth: 1,
+            titleColor: '#64748b',
+            bodyColor: '#e2e8f0',
+            bodyFont: { family: 'Share Tech Mono', size: 13 },
+            callbacks: {
+              title: (items) => {
+                const h = data.history[items[0].dataIndex];
+                return h.date ? `${h.date}  DAY ${h.day}` : `DAY ${h.day}`;
+              },
+              label: ctx => `¥ ${ctx.parsed.y}`
+            }
+          },
+          annotation: {
+            annotations: {
+              baseLine: {
+                type: 'line',
+                yMin: BASE,
+                yMax: BASE,
+                borderColor: 'rgba(255,255,255,0.15)',
+                borderWidth: 1,
+                borderDash: [4, 4],
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(30,58,95,0.5)' },
+            ticks: {
+              color: '#64748b',
+              font: { family: 'Share Tech Mono', size: 10 },
+              maxTicksLimit: 8
+            }
+          },
+          y: {
+            grid: { color: 'rgba(30,58,95,0.5)' },
+            ticks: {
+              color: '#64748b',
+              font: { family: 'Share Tech Mono', size: 10 }
+            }
+          }
+        }
+      }
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = prices;
+    chart.data.datasets[0].pointBackgroundColor = pointColors;
+    chart.data.datasets[0].pointRadius = prices.length > 30 ? 2 : 4;
+    chart.data.datasets[0].segment = { borderColor: segmentColor };
+    chart.update();
+  }
+}
+
+function updateHistory() {
+  const list = document.getElementById('historyList');
+  const items = [...data.history].reverse().map(h => {
+    const sign = h.change > 0 ? '+' : '';
+    const cls = h.change > 0 ? 'up' : h.change < 0 ? 'down' : '';
+    const dateStr = h.date ? dateLabel(h.date) : '';
+    return `<div class="history-item">
+      <span class="history-day">DAY ${h.day}${dateStr ? ' · ' + dateStr : ''}</span>
+      <span class="history-price">${h.price}</span>
+      <span class="history-change ${cls}">${h.day === 0 && h.change === 0 ? '―' : sign + h.change}</span>
+    </div>`;
+  }).join('');
+  list.innerHTML = items;
+}
+
+function exportJPEG() {
+  const originalCanvas = document.getElementById('myChart');
+  const dpr = window.devicePixelRatio || 1;
+  const chartW = originalCanvas.width / dpr;
+  const chartH = originalCanvas.height / dpr;
+
+  const today = todayStr();
+  const day = daysSince(data.startDate, today);
+  const lastEntry = data.history[data.history.length - 1];
+  const prices = data.history.map(h => h.price);
+  const high = Math.max(...prices);
+  const low = Math.min(...prices);
+  const total = data.currentPrice - BASE;
+  const lastChange = data.history.length > 1 ? lastEntry.change : 0;
+  const totalSign = total >= 0 ? '+' : '';
+  const changeSign = lastChange >= 0 ? '+' : '';
+
+  // Layout constants
+  const SCALE = 2;
+  const PAD = 14;
+  const HEADER_H = 38;   // title + date row
+  const STATS_H = 56;    // stat boxes row
+  const GAP = 8;
+  const FOOTER_H = 18;
+  const totalH = PAD + HEADER_H + GAP + STATS_H + GAP + chartH + GAP + FOOTER_H + PAD;
+
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = (chartW + PAD * 2) * SCALE;
+  exportCanvas.height = totalH * SCALE;
+  const ctx = exportCanvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+  const W = chartW + PAD * 2;
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, W, totalH);
+  bg.addColorStop(0, '#0a0e1a');
+  bg.addColorStop(1, '#0d1526');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, totalH);
+
+  // Accent top line
+  const accentLine = ctx.createLinearGradient(0, 0, W, 0);
+  accentLine.addColorStop(0, 'transparent');
+  accentLine.addColorStop(0.5, '#00e5ff');
+  accentLine.addColorStop(1, 'transparent');
+  ctx.fillStyle = accentLine;
+  ctx.fillRect(0, 0, W, 1);
+
+  let y = PAD;
+
+  // Title row
+  ctx.fillStyle = '#00e5ff';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('◆ STOCK SIMULATOR', PAD, y + 13);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(new Date().toLocaleDateString('ja-JP'), W - PAD, y + 13);
+
+  ctx.fillStyle = '#334155';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${dateLabel(data.startDate)} → ${dateLabel(today)}  (DAY ${day})`, PAD, y + 28);
+  y += HEADER_H + GAP;
+
+  // Stat boxes: 5 items
+  const stats = [
+    { label: '現在値', value: String(data.currentPrice), color: data.currentPrice >= BASE ? '#00e676' : '#ff1744' },
+    { label: '変動(前日比)', value: `${changeSign}${lastChange}`, color: lastChange >= 0 ? '#00e676' : '#ff1744' },
+    { label: '最高値', value: String(high), color: '#00e5ff' },
+    { label: '最安値', value: String(low), color: '#ff9800' },
+    { label: '累計変動', value: `${totalSign}${total}`, color: total >= 0 ? '#00e676' : '#ff1744' },
+  ];
+
+  const boxW = (W - PAD * 2 - GAP * (stats.length - 1)) / stats.length;
+  const boxH = STATS_H;
+
+  stats.forEach((s, i) => {
+    const bx = PAD + i * (boxW + GAP);
+    // Box bg
+    ctx.fillStyle = '#111827';
+    roundRect(ctx, bx, y, boxW, boxH, 6);
+    ctx.fill();
+    // Border
+    ctx.strokeStyle = '#1e3a5f';
+    ctx.lineWidth = 1;
+    roundRect(ctx, bx, y, boxW, boxH, 6);
+    ctx.stroke();
+    // Label
+    ctx.fillStyle = '#64748b';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.label, bx + boxW / 2, y + 16);
+    // Value
+    ctx.fillStyle = s.color;
+    ctx.font = `bold 14px monospace`;
+    ctx.fillText(s.value, bx + boxW / 2, y + 36);
+  });
+  y += boxH + GAP;
+
+  // Chart
+  ctx.drawImage(originalCanvas, PAD, y, chartW, chartH);
+  y += chartH + GAP;
+
+  // Footer
+  ctx.fillStyle = 'rgba(100,116,139,0.4)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`BASE: ${BASE}  |  STOCK SIMULATOR`, W / 2, y + 10);
+
+  // Download
+  const link = document.createElement('a');
+  link.download = `株価グラフ_${today}_Day${day}.jpeg`;
+  link.href = exportCanvas.toDataURL('image/jpeg', 0.95);
+  link.click();
+
+  showToast('グラフを保存しました！');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function exportJSON() {
+  const payload = JSON.stringify(data, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const today = todayStr();
+  const day = daysSince(data.startDate, today);
+  const link = document.createElement('a');
+  link.download = `株価データ_${today}_Day${day}.json`;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast('データを出力しました！');
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      // Validate structure
+      if (!imported.history || !Array.isArray(imported.history) || !imported.currentPrice) {
+        throw new Error('invalid');
+      }
+      // Ensure startDate exists
+      if (!imported.startDate) imported.startDate = imported.history[0]?.date || todayStr();
+
+      if (!confirm(`データを読み込みます。\n開始日: ${imported.startDate}\n履歴: ${imported.history.length}件\n現在値: ${imported.currentPrice}\n\n現在のデータは上書きされます。`)) {
+        event.target.value = '';
+        return;
+      }
+
+      data = imported;
+      saveData();
+      if (chart) { chart.destroy(); chart = null; }
+      document.getElementById('changeBadge').style.display = 'none';
+      document.getElementById('pctBadge').textContent = '';
+      updateUI(data.history.length > 1 ? data.history[data.history.length-1].change : 0);
+      showToast(`✓ ${data.history.length}件のデータを読み込みました`);
+    } catch(err) {
+      showToast('⚠ 読み込み失敗：ファイルが無効です');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+
+function resetData() {
+  if (!confirm('データをリセットしますか？')) return;
+  const today = todayStr();
+  data = { startDate: today, history: [{ day: 0, date: today, price: BASE, change: 0 }], currentPrice: BASE };
+  saveData();
+  if (chart) { chart.destroy(); chart = null; }
+  document.getElementById('changeBadge').style.display = 'none';
+  document.getElementById('pctBadge').textContent = '';
+  updateUI(0);
+  showToast('リセットしました');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Init
+updateUI(data.history.length > 1 ? data.history[data.history.length-1].change : 0);
+
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+}
+</script>
+</body>
+</html>
